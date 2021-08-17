@@ -213,6 +213,10 @@ type Options struct {
 	// Pluggable signature verification algorithm. If nil, ECDSA is used.
 	Verifier Verifier
 
+	// If true, will pass the new data bytes(instead of checksum) into the verify function
+	// Used by ed25519 verifier
+	VerifyUseContent bool
+
 	// Use this hash function to generate the checksum. If not set, SHA256 is used.
 	Hash crypto.Hash
 
@@ -305,11 +309,15 @@ func (o *Options) verifyChecksum(updated []byte) error {
 }
 
 func (o *Options) verifySignature(updated []byte) error {
-	checksum, err := checksumFor(o.Hash, updated)
-	if err != nil {
-		return err
+	if o.VerifyUseContent {
+		return o.Verifier.VerifySignature(updated, o.Signature, o.Hash, o.PublicKey)
+	} else {
+		checksum, err := checksumFor(o.Hash, updated)
+		if err != nil {
+			return err
+		}
+		return o.Verifier.VerifySignature(checksum, o.Signature, o.Hash, o.PublicKey)
 	}
-	return o.Verifier.VerifySignature(checksum, o.Signature, o.Hash, o.PublicKey)
 }
 
 func checksumFor(h crypto.Hash, payload []byte) ([]byte, error) {
