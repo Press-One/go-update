@@ -2,18 +2,20 @@ package update
 
 import (
 	"bytes"
+	"crypto"
 	"testing"
 )
 
 // key generated with signify
 const ed25519PublicKey = `untrusted comment: signify public key
-RWTmy5Eqf67hzAZOvgvJZhsk9gBT1o5NMNGvqDVp61T+upfZMZIyorMa
+RWRE33s/ZBRMI7egZoTfmDQaDeTEGN68Mo0zOaSt6XppleuYaeK1VGH1
 `
 
-// echo -n -e "\x01\x02\x03\x04\x05\x06" > TestVerifyED25519ignature
-// signify -S -s ./newkey.sec  -m ./TestVerifyED25519ignature
-const signature = `untrusted comment: verify with newkey.pub
-RWTmy5Eqf67hzOUnbZIdeRoaGdxQ+7K7DKFuyRSkHhcXDgOq39zSMiWb1pjLdbInhjPp8k8Z6NmO42jO+ocQ1SMcY0STv8AXog0=
+// shasum -a 256 TestVerifyED25519ignature | awk '{print "SHA256 ("$2") = "$1}' > hash
+// signify -S -e -s key.sec -m hash -x TestVerifyED25519ignature.sig
+const signature = `untrusted comment: verify with key.pub
+RWRE33s/ZBRMI85CRsh+BN9J/pJIoW+khF2GdYFvt5nxY8GRoaH1G9WTL60aFXEBQDK1f0WxvBhu1+rFMvOnKvZSAt5rVx/mCA4=
+SHA256 (TestVerifyED25519ignature) = 7192385c3c0605de55bb9476ce1d90748190ecb32a8eed7f5207b30cf6a1fe89
 `
 
 func TestVerifyED25519ignature(t *testing.T) {
@@ -24,9 +26,10 @@ func TestVerifyED25519ignature(t *testing.T) {
 	opts := Options{
 		TargetPath:       fName,
 		Verifier:         NewED25519Verifier(),
-		VerifyUseContent: true,
+		VerifyUseContent: false,
 		PublicKey:        []byte(ed25519PublicKey),
 		Signature:        []byte(signature),
+		Hash:             crypto.SHA256,
 	}
 
 	err := Apply(bytes.NewReader(newFile), opts)

@@ -8,6 +8,7 @@ import (
 	"crypto/ed25519"
 	"encoding/base64"
 	"encoding/binary"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"strings"
@@ -66,9 +67,9 @@ func parseb64(b64 []byte) (string, []byte, []byte, error) {
 }
 
 // NewED25519Verifier returns a Verifier that uses the ed25519 algorithm to verify updates.
-// Compatible with signify-openbsd
+// Compatible with signify-openbsd (embedded)
 func NewED25519Verifier() Verifier {
-	return verifyFn(func(msg, signature []byte, _ crypto.Hash, publicKey crypto.PublicKey) error {
+	return verifyFn(func(checksum /*sha256*/, signature []byte, _ crypto.Hash, publicKey crypto.PublicKey) error {
 		var (
 			sig    sig
 			pubkey pubkey
@@ -85,7 +86,7 @@ func NewED25519Verifier() Verifier {
 			return err
 		}
 
-		_, sigbuf, _, err := parseb64(signature)
+		_, sigbuf, msg, err := parseb64(signature)
 		if err != nil {
 			return err
 		}
@@ -100,6 +101,14 @@ func NewED25519Verifier() Verifier {
 			return errors.New("signature verification failed")
 		}
 
+		msgv := strings.Split(string(msg), " = ")
+		if len(msgv) != 2 {
+			return errors.New("signature verification failed: invalid messages")
+		}
+		hash := strings.TrimSpace(msgv[1])
+		if !(hex.EncodeToString(checksum) == hash) {
+			return errors.New("signature verification failed: sha256 mismatch")
+		}
 		return nil
 	})
 }
