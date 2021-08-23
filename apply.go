@@ -1,7 +1,10 @@
 package update
 
 import (
+	"archive/tar"
+	"archive/zip"
 	"bytes"
+	"compress/gzip"
 	"crypto"
 	"crypto/x509"
 	"encoding/pem"
@@ -113,9 +116,29 @@ func Apply(update io.Reader, opts Options) error {
 	}
 	defer fp.Close()
 
-	_, err = io.Copy(fp, bytes.NewReader(newBytes))
-	if err != nil {
-		return err
+	if opts.IsTarGz {
+		uncompressedBytes, err := extractTarGz(newBytes)
+		if err != nil {
+			return err
+		}
+		_, err = io.Copy(fp, bytes.NewReader(uncompressedBytes))
+		if err != nil {
+			return err
+		}
+	} else if opts.IsZip {
+		uncompressedBytes, err := extractZip(newBytes)
+		if err != nil {
+			return err
+		}
+		_, err = io.Copy(fp, bytes.NewReader(uncompressedBytes))
+		if err != nil {
+			return err
+		}
+	} else {
+		_, err = io.Copy(fp, bytes.NewReader(newBytes))
+		if err != nil {
+			return err
+		}
 	}
 
 	// if we don't call fp.Close(), windows won't let us move the new executable
@@ -216,6 +239,12 @@ type Options struct {
 	// If true, will pass the new data bytes(instead of checksum) into the verify function
 	// Used by ed25519 verifier
 	VerifyUseContent bool
+
+	// If true, it will be uncompressed(.tar.gz) before apply
+	IsTarGz bool
+
+	// If true, it will be uncompressed(.zip) before apply
+	IsZip bool
 
 	// Use this hash function to generate the checksum. If not set, SHA256 is used.
 	Hash crypto.Hash
@@ -327,4 +356,51 @@ func checksumFor(h crypto.Hash, payload []byte) ([]byte, error) {
 	hash := h.New()
 	hash.Write(payload) // guaranteed not to error
 	return hash.Sum([]byte{}), nil
+}
+
+func extractZip(content []byte) ([]byte, error) {
+	zipReader, err := zip.NewReader(bytes.NewReader(content), int64(len(content)))
+	if err != nil {
+		return nil, err
+	}
+
+	if len(zipReader.File) != 1 {
+		return nil, errors.New(fmt.Sprintf("extractZip: multi file is not supported, files: %d",
+			len(zipReader.File)))
+	}
+	f := zipReader.File[0]
+	rc, err := f.Open()
+	if err != nil {
+		return nil, err
+	}
+	output, err := ioutil.ReadAll(rc)
+	if err != nil {
+		return nil, err
+	}
+	rc.Close()
+	return output, nil
+}
+
+func extractTarGz(content []byte) ([]byte, error) {
+	uncompressedStream, err := gzip.NewReader(bytes.NewReader(content))
+	if err != nil {
+		return nil, err
+	}
+
+	tarReader := tar.NewReader(uncompressedStream)
+
+	header, err := tarReader.Next()
+
+	if err != nil {
+		return nil, err
+	}
+
+	// Only support single binary
+	if header.Typeflag == tar.TypeReg {
+		return ioutil.ReadAll(tarReader)
+	}
+	return nil, errors.New(fmt.Sprintf("extractTarGz: uknown type: %s in %s",
+		string(header.Typeflag),
+		header.Name,
+	))
 }

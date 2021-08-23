@@ -3,6 +3,7 @@ package update
 import (
 	"bytes"
 	"crypto"
+	"io/ioutil"
 	"testing"
 )
 
@@ -34,4 +35,20 @@ func TestVerifyED25519ignature(t *testing.T) {
 
 	err := Apply(bytes.NewReader(newFile), opts)
 	validateUpdate(fName, err, t)
+}
+
+func TestUnZip(t *testing.T) {
+	content, _ := ioutil.ReadFile("test/newFile.zip") // the file is inside the local directory
+	uncompressedBytes, _ := extractZip(content)
+	if !bytes.Equal(uncompressedBytes, newFile) {
+		t.Fatalf("Unzip Failed")
+	}
+}
+
+func TestUnTarGz(t *testing.T) {
+	content, _ := ioutil.ReadFile("test/newFile.tar.gz") // the file is inside the local directory
+	uncompressedBytes, _ := extractTarGz(content)
+	if !bytes.Equal(uncompressedBytes, newFile) {
+		t.Fatalf("UnTarGz Failed")
+	}
 }
